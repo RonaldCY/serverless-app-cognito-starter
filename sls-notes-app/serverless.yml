@@ -1,0 +1,115 @@
+service: sls-notes-app
+
+provider:
+  name: aws
+  runtime: nodejs12.x
+  stage: prod
+  region: us-east-1
+  # iamRoleStatements:
+  #   - Effect: Allow
+  #     Action:
+  #       - s3:GetObject
+  #       - s3:PutObject
+  #       - s3:ListBucket
+  #     Resource: 
+  #       - arn:aws:s3:::${self:custom.bucketName}
+  #       - arn:aws:s3:::${self:custom.bucketName}/*
+  #     Principal: "*"
+    # - Effect: "Allow"
+    #   Action:
+    #     - "s3:ListBucket"
+    #   Resource: { "Fn::Join": ["", ["arn:aws:s3:::", { "Ref": "[S3BucketANOTHER_BUCKET_NAME]" } ] ] }
+    # - Effect: "Allow"
+    #   Action:
+    #     - "s3:PutObject"
+    #   Resource: { "Fn::Join": ["", ["arn:aws:s3:::", { "Ref": "[S3BucketANOTHER_BUCKET_NAME]" }, "/*" ] ] }
+    # - Effect: "Allow"
+    #   Action:
+    #     - "s3:ListBucket"
+    #   Resource: { "Fn::Join" : ["", ["arn:aws:s3:::", { "Ref" : "ServerlessDeploymentBucket" } ] ]  }
+    # - Effect: "Allow"
+    #   Action:
+    #     - "s3:PutObject"
+      # Resource:
+      #   Fn::Join:
+      #     - ""
+      #     - - "arn:aws:s3:::"
+      #       - "Ref" : "ServerlessDeploymentBucket"
+      #       - "/*"
+
+plugins:
+    - serverless-s3-sync
+
+custom:
+    bucketName: sls-notes-app-202106123
+    s3Sync:
+        - bucketName: ${self:custom.bucketName}
+          localDir: public/
+
+resources:
+    Resources:
+        NotesAppBucket:
+            Type: AWS::S3::Bucket
+            Properties:
+                BucketName: ${self:custom.bucketName}
+                AccessControl: PublicRead
+                # CorsConfiguration:
+                #   CorsRules:
+                #     - AllowedHeaders:
+                #         - "*"
+                #       AllowedMethods:
+                #         - GET
+                #         - POST
+                #         - PUT
+                #       AllowedOrigins:
+                #         - "*"
+                WebsiteConfiguration:
+                    IndexDocument: index.html
+                    ErrorDocument: index.html
+        NotesBucketPolicy:
+            Type: AWS::S3::BucketPolicy
+            Properties:
+                Bucket:
+                    Ref: NotesAppBucket
+                PolicyDocument:
+                    Statement:
+                        - Sid: PublicReadGetObject
+                          Effect: Allow
+                          Principal: '*'
+                          Action:
+                              - s3:GetObject
+                          Resource: arn:aws:s3:::${self:custom.bucketName}/*
+        CloudFrontDistribution:
+            Type: AWS::CloudFront::Distribution
+            Properties:
+                DistributionConfig:
+                    Origins:
+                        - DomainName: ${self:custom.bucketName}.s3.amazonaws.com
+                          Id: NotesApp
+                          CustomOriginConfig:
+                              HTTPPort: 80
+                              HTTPSPort: 443
+                              OriginProtocolPolicy: https-only
+                    Enabled: 'true'
+                    DefaultRootObject: index.html
+                    CustomErrorResponses:
+                        - ErrorCode: 404
+                          ResponseCode: 200
+                          ResponsePagePath: /index.html
+                    DefaultCacheBehavior:
+                        AllowedMethods:
+                            - DELETE
+                            - GET
+                            - HEAD
+                            - OPTIONS
+                            - PATCH
+                            - POST
+                            - PUT
+                        TargetOriginId: NotesApp
+                        ForwardedValues:
+                            QueryString: 'false'
+                            Cookies:
+                                Forward: none
+                        ViewerProtocolPolicy: redirect-to-https
+                    ViewerCertificate:
+                        CloudFrontDefaultCertificate: true
